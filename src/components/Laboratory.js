@@ -1,19 +1,22 @@
 import React from "react";
 import Matter from "matter-js";
-import { Beaker, Sodiums } from "./Shapes";
+import Methods from "./Organizer";
+
 window.decomp = require("poly-decomp");
 
 const Laboratory = () => {
-  const rotateSpeed = Math.PI / 96;
-  const minRotateSpeed = rotateSpeed / 5;
-
   //module aliases
   let Engine = Matter.Engine,
     World = Matter.World,
     Render = Matter.Render,
     Bodies = Matter.Bodies,
     Body = Matter.Body,
-    Events = Matter.Events;
+    MouseConstraint = Matter.MouseConstraint,
+    Mouse = Matter.Mouse,
+    Events = Matter.Events,
+    Composite = Matter.Composite,
+    Common = Matter.Common,
+    Constraint = Matter.Constraint;
   //Sleeping = Matter.Sleeping;
 
   //create an engine
@@ -21,28 +24,26 @@ const Laboratory = () => {
   engine.world.gravity.y = 0.3;
   engine.timing.timeScale = 1;
 
+  //prettier-ignore
+  const Package = {Engine, World, Render, Bodies, Body, MouseConstraint, Mouse, Events, Composite, Common, Constraint, engine}
+
+  //Must pass Common to have unique sequential IDs
+  const Functions = Methods(Package);
+
   let ground1 = Bodies.rectangle(400, 720, 810, 60);
-  //let ground2 = Bodies.rectangle(400, 570, 810, 20);
-  //let ground3 = Bodies.rectangle(400, 590, 810, 20);
   Body.setStatic(ground1, true);
-  //Body.setStatic(ground2, true);
-  //Body.setStatic(ground3, true);
 
-  let beaker1 = Beaker(100, 200, 100, 100, 10);
-  let beaker2 = Beaker(175, 350, 75, 75, 5);
-  let atoms = Sodiums(80, 10, 5, 5, 1);
-  //Body.setStatic(beaker1, true);
-  Body.setStatic(beaker2, true);
+  let base1 = Functions.makeBeaker("large", 100, 200);
+  let sens1 = Functions.makeSensor(120, 100, 200);
 
-  let allBodies = [ground1, beaker1, beaker2].concat(atoms);
+  Body.setStatic(base1, true);
 
-  Events.on(engine, "beforeUpdate", function() {
-    let gravity = engine.world.gravity;
-    Body.applyForce(beaker1, beaker1.position, {
-      x: -gravity.x * gravity.scale * beaker1.mass,
-      y: -gravity.y * gravity.scale * beaker1.mass
-    });
-  });
+  let beaker1 = Functions.moveAndAttachSensor(base1, sens1);
+
+  //prettier-ignore
+  let allBodies = [ground1, beaker1];
+
+  Functions.allowNaClReaction();
 
   //create a renderer
   let render = Render.create({
@@ -51,7 +52,8 @@ const Laboratory = () => {
     options: {
       width: 800,
       height: 800,
-      wireframes: false
+      wireframes: false,
+      background: "#D1B4F3"
     }
   });
 
@@ -64,19 +66,37 @@ const Laboratory = () => {
   //run the renderer
   Render.run(render);
 
-  function togRotateBeaker1() {
-    beaker1.angularVelocity > minRotateSpeed
-      ? Body.setAngularVelocity(beaker1, 0)
-      : Body.setAngularVelocity(beaker1, Math.PI / 96);
+  // add mouse control
+  let mouse = Mouse.create(render.canvas),
+    mouseConstraint = Functions.makeMouseConstraint(mouse);
+
+  World.add(engine.world, mouseConstraint);
+
+  // keep the mouse in sync with rendering
+  render.mouse = mouse;
+
+  function vibrate() {
+    let bodies = Composite.allBodies(engine.world);
+    for (let i = 0; i < bodies.length; i++) {
+      let body = bodies[i];
+      if (body.label === "Na" || body.label === "Cl") {
+        let forceMagnitude = 0.005 * body.mass;
+        Body.setVelocity(body, {
+          x: Common.choose([1, -1]),
+          y: Common.choose([1, -1])
+        });
+      }
+    }
   }
-  function stopBeaker1() {
-    Body.setVelocity(beaker1, { x: 0, y: 0 });
-    Body.setAngularVelocity(beaker1, 0);
-  }
+
   return (
     <div>
-      <button onClick={togRotateBeaker1}>toggleRotate</button>
-      <button onClick={stopBeaker1}>stop</button>
+      <button onClick={() => Functions.toggleRotate(base1)}>
+        toggleRotate
+      </button>
+      <button onClick={() => Functions.addSodium()}>addSodium</button>
+      <button onClick={() => Functions.addChlorine()}>addChlorine</button>
+      <button onClick={() => Functions.vibrate()}>shake</button>
     </div>
   );
 };
